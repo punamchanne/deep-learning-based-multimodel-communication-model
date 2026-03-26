@@ -80,7 +80,8 @@ const Dashboard = () => {
 
 
   const startDetection = () => {
-    ws.current = new WebSocket('ws://localhost:8000/ws/detect');
+    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+    ws.current = new WebSocket(`${wsUrl}/ws/detect`);
     
     ws.current.onopen = () => {
       setIsDetecting(true);
