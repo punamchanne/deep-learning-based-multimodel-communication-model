@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply h-screen w-full overflow-x-hidden transition-colors duration-200;
+  }
+}
