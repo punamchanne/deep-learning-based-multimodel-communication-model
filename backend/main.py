@@ -1,4 +1,5 @@
 import traceback
+import os
 from fastapi import FastAPI, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta
@@ -12,11 +13,15 @@ app = FastAPI(title="GazeSense API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+async def root():
+    return {"message": "GazeSense API is running"}
 
 @app.post("/signup", response_model=Token)
 async def signup(user: UserCreate):
