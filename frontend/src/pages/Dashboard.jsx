@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import WebcamFeed from '../components/WebcamFeed';
 import OutputPanel from '../components/OutputPanel';
 import ControlPanel from '../components/ControlPanel';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX, FileDown } from 'lucide-react';
 
 const Dashboard = () => {
   const [isDetecting, setIsDetecting] = useState(false);
@@ -29,55 +29,120 @@ const Dashboard = () => {
 
 
   const PHRASE_MAP = {
-    'BLINK': "I am experiencing an emergency and need immediate assistance.",
-    'SMILE': "I am feeling comfortable and happy right now, thank you.",
-    'MOUTH': "I am feeling thirsty and would like to have some water.",
-    'LEFT': "Please adjust my position, I am feeling stiff.",
-    'RIGHT': "I am feeling tired and would like to take some rest now.",
-    'EYEBROWS': "Yes, I agree with what you are saying.",
-    'DOWN': "I am feeling uncomfortable right now, please help me."
+    'BLINK': "confirm action",
+    'DOUBLE_BLINK': "alert / emergency",
+    'LEFT': "navigation",
+    'RIGHT': "navigation",
+    'NOD': "yes",
+    'SHAKE': "no",
+    'MOUTH': "activate system",
+    'SMILE': "positive feedback",
+    'EYEBROWS': "attention reminder"
   };
 
   const speak = (text) => {
     if (ttsEnabled && 'speechSynthesis' in window && !cooldownRef.current) {
-      window.speechSynthesis.cancel(); // Stop current speech
+      window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       window.speechSynthesis.speak(utterance);
-      
-      // Prevent rapid fire
       cooldownRef.current = true;
       setTimeout(() => { cooldownRef.current = false; }, 2000);
     }
   };
 
-  const handleTrigger = (type) => {
+  const handleTrigger = async (type) => {
     if (isLockedRef.current) return;
     
     const phrase = PHRASE_MAP[type];
     if (!phrase) return;
 
-    // Stability check: must see the same expression for 8 frames (~1s)
     if (frameCounterRef.current.type === type) {
       frameCounterRef.current.count += 1;
     } else {
       frameCounterRef.current = { type: type, count: 1 };
     }
 
-    if (frameCounterRef.current.count >= 8) {
-      setMessages(prev => [{ text: phrase, time: new Date().toLocaleTimeString() }, ...prev].slice(0, 50));
+    const requiredFrames = 2;
+
+    if (frameCounterRef.current.count >= requiredFrames) {
+      const timestamp = new Date().toISOString();
+      const displayTime = new Date().toLocaleTimeString();
+      
+      setMessages(prev => [{ text: phrase, time: displayTime }, ...prev].slice(0, 50));
       speak(phrase);
       setCurrentSelection(phrase);
-      
-      // Lock system until neutral state is returned
+
+      // Save Log to Backend
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const token = localStorage.getItem('token');
+        await fetch(`${apiUrl}/logs`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ 
+            expression_type: type,
+            phrase: phrase,
+            timestamp: timestamp
+          })
+        });
+      } catch (err) {
+        console.error("Failed to save log:", err);
+      }
+
       isLockedRef.current = true;
       neutralCounterRef.current = 0;
       frameCounterRef.current = { type: '', count: 0 };
     }
   };
 
+  const downloadPDF = async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${apiUrl}/logs`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const logs = await response.json();
 
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
 
+      // Add Title
+      doc.setFontSize(20);
+      doc.text("GazeSense Communication Report", 14, 22);
+      doc.setFontSize(11);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
 
+      // Add Table
+      const tableColumn = ["Date", "Time", "Expression", "Action"];
+      const tableRows = logs.map(log => {
+        const d = new Date(log.timestamp);
+        return [
+          d.toLocaleDateString(),
+          d.toLocaleTimeString(),
+          log.expression_type,
+          log.phrase
+        ];
+      });
+
+      doc.autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 35,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] } // Brand color
+      });
+
+      doc.save(`GazeSense_Report_${new Date().toLocaleDateString()}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download PDF report");
+    }
+  };
 
   const startDetection = () => {
     const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
@@ -90,26 +155,24 @@ const Dashboard = () => {
 
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log("AI Data Received:", data);
-      
       setGaze(data.gaze);
       setBlink(data.blink);
       setSmile(data.smile);
       setMouthOpen(data.mouth_open);
       setEyebrowsUp(data.eyebrows_up);
-
       setFaceDetected(data.face_detected);
 
       if (!data.face_detected) {
         lastSpokenRef.current = '';
-        setCurrentSelection('Face Not Found - Please Move Closer');
+        setCurrentSelection('Face Not Found');
         return;
       }
 
-      // Determine the active expression with priority for Communication
       let activeType = null;
-      if (data.mouth_open) activeType = 'MOUTH';
-      else if (data.gaze === 'DOWN') activeType = 'DOWN';
+      if (data.double_blink) activeType = 'DOUBLE_BLINK';
+      else if (data.head_nod) activeType = 'NOD';
+      else if (data.head_shake) activeType = 'SHAKE';
+      else if (data.mouth_open) activeType = 'MOUTH';
       else if (data.gaze === 'LEFT') activeType = 'LEFT';
       else if (data.gaze === 'RIGHT') activeType = 'RIGHT';
       else if (data.blink) activeType = 'BLINK';
@@ -120,11 +183,7 @@ const Dashboard = () => {
         handleTrigger(activeType);
         neutralCounterRef.current = 0;
       } else {
-        // Handle Neutral State
         neutralCounterRef.current += 1;
-        frameCounterRef.current = { type: '', count: 0 };
-        
-        // Unlock after 10 frames of neutral state
         if (neutralCounterRef.current >= 10) {
           isLockedRef.current = false;
           setCurrentSelection('Searching for expressions...');
@@ -170,13 +229,23 @@ const Dashboard = () => {
             <p className="text-gray-600 dark:text-gray-400 mt-1">Directly communicate using facial expressions and gaze.</p>
           </div>
 
-          <button 
-            onClick={() => setTtsEnabled(!ttsEnabled)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-semibold ${ttsEnabled ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-400 border border-brand-200 dark:border-brand-800' : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-300 dark:border-gray-700'}`}
-          >
-            {ttsEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-            <span className="hidden sm:inline">{ttsEnabled ? 'Speech Output On' : 'Speech Output Off'}</span>
-          </button>
+          <div className="flex gap-3">
+            <button 
+              onClick={downloadPDF}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 transition-all font-semibold shadow-sm"
+            >
+              <FileDown className="w-5 h-5" />
+              <span className="hidden sm:inline">Download PDF Report</span>
+            </button>
+
+            <button 
+              onClick={() => setTtsEnabled(!ttsEnabled)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-semibold ${ttsEnabled ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-400 border border-brand-200 dark:border-brand-800' : 'bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-300 dark:border-gray-700'}`}
+            >
+              {ttsEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              <span className="hidden sm:inline">{ttsEnabled ? 'Speech Output On' : 'Speech Output Off'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">

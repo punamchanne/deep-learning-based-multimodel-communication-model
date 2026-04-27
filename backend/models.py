@@ -25,7 +25,6 @@ class TokenData(BaseModel):
     email: Optional[str] = None
 
 class CommunicationLog(BaseModel):
-    gaze: str
-    blink: bool
-    message: str
-    timestamp: datetime = datetime.utcnow()
+    expression_type: str
+    phrase: str
+    timestamp: datetime

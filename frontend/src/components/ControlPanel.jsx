@@ -13,13 +13,14 @@ const ControlPanel = ({ isDetecting, onStart, onStop, currentSelection }) => {
         
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {[
-            { act: 'Blink', msg: 'Emergency' },
-            { act: 'Smile', msg: 'Happy' },
-            { act: 'Open Mouth', msg: 'Water' },
-            { act: 'Look Left', msg: 'Adjust Position' },
-            { act: 'Look Right', msg: 'Rest' },
-            { act: 'Look Down', msg: 'Uncomfortable' },
-            { act: 'Eyebrows Up', msg: 'Yes' }
+            { act: 'Blink', msg: 'confirm action' },
+            { act: 'Double Blink', msg: 'alert / emergency' },
+            { act: 'Look Left/Right', msg: 'navigation' },
+            { act: 'Head Nod', msg: 'yes' },
+            { act: 'Head Shake', msg: 'no' },
+            { act: 'Open Mouth', msg: 'activate system' },
+            { act: 'Smile', msg: 'positive feedback' },
+            { act: 'Eyebrows Up', msg: 'attention reminder' }
           ].map((item, idx) => (
             <div key={idx} className="flex flex-col p-3 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
               <span className="text-[10px] font-bold text-brand-500 uppercase">{item.act}</span>
